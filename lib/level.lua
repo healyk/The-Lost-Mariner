@@ -4,12 +4,13 @@
 Level = Level or {}
 Level.__index = Level
 
-FLOOR_TYPE = 'floor'
-WALL_TYPE = 'wall'
+FLOOR_TYPE      = 'floor'
+WALL_TYPE       = 'wall'
+UPSTAIRS_TYPE   = 'upstairs'
+DOWNSTAIRS_TYPE = 'downstairs'
 
 function Level.isFloorTile(tile)
-  return true
-  --return tile.tileType == FLOOR_TYPE
+  return tile.tileType == FLOOR_TYPE
 end
 
 function Level.create(width, height)
@@ -25,7 +26,7 @@ function Level.create(width, height)
     
     for y = 0, self.height do
       self.tiles[x][y] = { 
-        tileType = FLOOR_TYPE,
+        tileType = WALL_TYPE,
         mob = nil,
         item = nil
       }
@@ -185,7 +186,6 @@ function LevelView:draw(game)
           self:drawMob(tile.mob, x, y)
         elseif tile.item then
           local item = tile.item[1]
-          
           Graphics.renderSprite(item.sprite, x * TILE_SIZE, y * TILE_SIZE)
         end
       end

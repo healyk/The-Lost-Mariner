@@ -3,9 +3,9 @@ require('lib/graphics')
 require('lib/level')
 require('lib/mob')
 require('lib/item')
+require('lib/level_gen')
 require('lib/game')
 require('lib/ingame')
-require('lib/level_gen')
 
 Resources = {}
 game = nil
@@ -38,6 +38,8 @@ function love.load()
   Resources.levelSprites = {}
   Resources.levelSprites.wall = Resources.tiles:makeSprite(1, 0)
   Resources.levelSprites.floor = Resources.tiles:makeSprite(1, 1)
+  Resources.levelSprites.upstairs = Resources.tiles:makeSprite(2, 1)
+  Resources.levelSprites.downstairs = Resources.tiles:makeSprite(3, 1)
   
   Resources.uiSprites = SpriteSheet.create('data/graphics/ui.png', 16, 16)
   

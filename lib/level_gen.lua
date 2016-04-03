@@ -1,105 +1,184 @@
 LevelGen = LevelGen or {}
 
+-- This is the width of the entire dungeon.
+DUNGEON_DEFAULT_WIDTH = 50
+DUNGEON_DEFAULT_HEIGHT = 50
+
+-- How much room to give around the dungeon
+DUNGEON_PADDING_SIZE = 20
+
 --
--- LevelGens
+-- LevelGen
 --
 
 LevelGen.TILE_FLOOR = 1
 LevelGen.TILE_WALL = 2
-
-function LevelGen.buildCaves(width, height, rng)
-  local level = LevelGen.create(width, height, LevelGen.TILE_FLOOR)
-  LevelGen.log = "cavegen start\r\n--------------\r\n"
-  
-  LevelGen.randomFill(level, LevelGen.TILE_WALL, rng, 40)
-
-  local newLevel = nil
-  for i = 0, 9 do
-    newLevel = LevelGen.create(level.width, level.height, LevelGen.TILE_FLOOR)
-
-    for x = 0, level.width do
-      for y = 0, level.height do
-        local count1 = LevelGen.tileCount(level, x, y, 1, LevelGen.TILE_WALL)
-        local count2 = LevelGen.tileCount(level, x, y, 2, LevelGen.TILE_WALL)
-
-        if count1 >= 5 or count2 <= 2 then
-          newLevel[x][y] = LevelGen.TILE_WALL
-        else
-          newLevel[x][y] = LevelGen.TILE_FLOOR
-        end
-      end
-    end
-    
-    level = newLevel
-  end
-
-  local result = LevelGen.checkReachable(level)
-  if result == 0 then
-    love.filesystem.append("levelgen", LevelGen.log, LevelGen.log:len())
-    return level
-  else
-    logmsg("buildCaves: not all tiles reachable, regenerating", result)
-    LevelGen.log = LevelGen.log .. "Reachable result: " .. result .. "\r\n"
-    love.filesystem.append("levelgen", LevelGen.log, LevelGen.log:len())
-    return LevelGen.buildCaves(width, height, rng)
-  end
-end
+LevelGen.TILE_DOWNSTAIRS = 3
+LevelGen.TILE_UPSTAIRS = 4
 
 --
--- Helpers for levelgen
+-- Generates a layout layout based on caverns.
 --
-function LevelGen.create(width, height, fill)
-  local level = {}
-  
-  for x = 0, width do
-    level[x] = {}
-    for y = 0, height do
-      level[x][y] = fill
-    end
-  end
-  
-  level.width = width
-  level.height = height
+function LevelGen.buildCaverns(rng, depth)
+  local layout = LevelGen.buildCavernsLayout(DUNGEON_DEFAULT_WIDTH, DUNGEON_DEFAULT_HEIGHT, rng)
+  layout = LevelGen.padLayout(layout)
+  local level = LevelGen.finalizeLevel(layout, rng)
   
   return level
 end
 
---
--- Checks an already generated level to see if all walkable squares are reachable.
--- Returns 0 if all tiles are reachable, otherwise it will return the number of unreached tiles
--- Will fill in level.walkable with a list of walkable tiles.  This can be used later for
--- various generators (items, enemies, and so forth)
---
-function LevelGen.checkReachable(level)
-  level.walkable = {}
+function LevelGen.buildCavernsLayout(width, height, rng)
+  local layout = LevelGen.create(width, height, LevelGen.TILE_FLOOR)
   
-  -- Find all walkable tiles
-  for x = 0, level.width do
-    for y = 0, level.height do
-      if level[x][y] == LevelGen.TILE_FLOOR then
-        table.insert(level.walkable, { x, y })
+  LevelGen.randomFill(layout, LevelGen.TILE_WALL, rng, 40)
+
+  local newLayout = nil
+  for i = 0, 9 do
+    newLayout = LevelGen.create(layout.width, layout.height, LevelGen.TILE_FLOOR)
+
+    for x = 0, layout.width do
+      for y = 0, layout.height do
+        local count1 = LevelGen.tileCount(layout, x, y, 1, LevelGen.TILE_WALL)
+        local count2 = LevelGen.tileCount(layout, x, y, 2, LevelGen.TILE_WALL)
+
+        if count1 >= 5 or count2 <= 2 then
+          newLayout[x][y] = LevelGen.TILE_WALL
+        else
+          newLayout[x][y] = LevelGen.TILE_FLOOR
+        end
+      end
+    end
+    
+    layout = newLayout
+  end
+
+  local result = LevelGen.checkReachable(layout)
+  if result == 0 then
+    LevelGen.placeExits(layout, rng)
+    --LevelGen.dumpLayout(layout, 'levelgen')
+    return layout
+  else
+    logmsg("buildCavernsLayout: not all tiles reachable, regenerating", result)
+    return LevelGen.buildCavernsLayout(width, height, rng)
+  end
+end
+
+--
+-- Helpers for LevelGen
+--
+function LevelGen.create(width, height, fill)
+  local layout = {}
+  
+  for x = 0, width do
+    layout[x] = {}
+    for y = 0, height do
+      layout[x][y] = fill
+    end
+  end
+  
+  layout.width = width
+  layout.height = height
+  
+  return layout
+end
+
+function LevelGen.padLayout(layout)
+  local newLayout = LevelGen.create(DUNGEON_DEFAULT_WIDTH + (DUNGEON_PADDING_SIZE * 2), 
+                                    DUNGEON_DEFAULT_HEIGHT + (DUNGEON_PADDING_SIZE * 2), LevelGen.TILE_WALL)
+  
+  for x = 0, layout.width do
+    for y = 0, layout.height do
+      newLayout[x + DUNGEON_PADDING_SIZE][y + DUNGEON_PADDING_SIZE] = layout[x][y]
+    end
+  end
+  
+  return newLayout
+end
+
+local layoutMapping = {
+  [LevelGen.TILE_FLOOR] =      FLOOR_TYPE,
+  [LevelGen.TILE_WALL] =       WALL_TYPE,
+  [LevelGen.TILE_DOWNSTAIRS] = DOWNSTAIRS_TYPE,
+  [LevelGen.TILE_UPSTAIRS] =   UPSTAIRS_TYPE
+}
+
+--
+-- Builds the actual layout from a layout
+--
+function LevelGen.finalizeLevel(layout, rng)
+  local level = Level.create(DUNGEON_DEFAULT_WIDTH + (2 * DUNGEON_PADDING_SIZE),
+                             DUNGEON_DEFAULT_HEIGHT + (2 * DUNGEON_PADDING_SIZE))
+  
+  for x = 0, (layout.width - 1) do
+    for y = 0, (layout.height - 1) do
+      local layoutTile = layout[x][y]
+      
+      level:getTile(x, y).tileType = layoutMapping[layoutTile]
+        
+      if layoutTile == LevelGen.TILE_UPSTAIRS then
+        LevelGen.setPlayerStart(level, layout, x, y)
       end
     end
   end
   
-  -- Copy the list
-  local walkableCopy = {}
-  for k, v in pairs(level.walkable) do
-    table.insert(walkableCopy, v)
+  return level
+end
+
+function LevelGen.setPlayerStart(level, layout, x, y)
+  local points = {
+    { x + 1, y },
+    { x - 1, y },
+    { x,     y + 1 },
+    { x,     y - 1 }
+  }
+  
+  for i, point in ipairs(points) do
+    local testTile = layout[point[1]][point[2]]
+
+    if testTile == LevelGen.TILE_FLOOR then
+      level.playerStart = point
+      break
+    end
+  end
+end
+
+--
+-- Checks an already generated layout to see if all walkable squares are reachable.
+-- Returns 0 if all tiles are reachable, otherwise it will return the number of unreached tiles
+-- Will fill in layout.walkable with a list of walkable tiles.  This can be used later for
+-- various generators (items, enemies, and so forth)
+--
+function LevelGen.checkReachable(layout)
+  layout.walkable = {}
+  local walkables = {}
+  
+  -- Find all walkable tiles
+  for x = 0, layout.width do
+    for y = 0, layout.height do
+      if layout[x][y] == LevelGen.TILE_FLOOR then
+        table.insert(walkables, { x, y })
+      end
+    end
   end
  
-  local firstPoint = table.remove(walkableCopy)
-  local msg = "Removing first point " .. firstPoint[1] .. ', ' .. firstPoint[2] .. "\r\n"
-  LevelGen.log = LevelGen.log .. msg
-  LevelGen.removeWalkable(walkableCopy, firstPoint)
+  local firstPoint = table.remove(walkables)
+  LevelGen.removeWalkable(layout, walkables, firstPoint)
   
-  return #walkableCopy
+  -- Simple fix for the walkable problem -- if it's less than a certain threshold just fill those tiles
+  if #walkables <= 100 then
+    while #walkables > 0 do
+      local point = table.remove(walkables)
+      layout[point[1]][point[2]] = LevelGen.TILE_WALL
+    end
+  end
+  
+  return #walkables
 end
 
 --
 -- This is used by LevelGen.checkReachable
 --
-function LevelGen.removeWalkable(walkables, point)
+function LevelGen.removeWalkable(layout, walkables, point)
   local x = point[1]
   local y = point[2]
   local otherPoints = { 
@@ -110,54 +189,118 @@ function LevelGen.removeWalkable(walkables, point)
   }
   
   for i, p in pairs(otherPoints) do
-    local index = -1
-    for i, p2 in pairs(walkables) do
+    for index, p2 in pairs(walkables) do
       if p2[1] == p[1] and p2[2] == p[2] then
-        index = i
-        break
-      end
-    end
-
-    local newPoint = table.remove(walkables, index)
+        local newPoint = table.remove(walkables, index)
     
-    if newPoint then
-      LevelGen.log = LevelGen.log .. "removing point " .. newPoint[1] .. ', ' .. newPoint[2] .. "\r\n"
-      LevelGen.removeWalkable(walkables, newPoint)
+        if newPoint then
+          LevelGen.removeWalkable(layout, walkables, newPoint)
+          table.insert(layout.walkable, newPoint)
+        end
+      end
     end
   end
 end
 
--- Randomly puts 'fill' into places in the level based on rng
---    level     - level to fill
+--
+-- Randomly puts 'fill' into places in the layout based on rng
+--    layout    - layout to fill
 --    fill      - what to fill with
 --    rng       - random number generator
 --    threshold - If rng returns a random below it then fill happens.  Should be between 0 and 100
-function LevelGen.randomFill(level, fill, rng, threshold)
-  for x = 0, level.width do
-    for y = 0, level.height do
+--
+function LevelGen.randomFill(layout, fill, rng, threshold)
+  for x = 0, layout.width do
+    for y = 0, layout.height do
       number = rng:random(1, 100)
       if number < threshold then
-        level[x][y] = fill
+        layout[x][y] = fill
       end
     end
   end
 end
 
+--
 -- Counts the number of tiles around a given position 
-function LevelGen.tileCount(level, x, y, distance, value)
+--
+function LevelGen.tileCount(layout, x, y, distance, value)
   local count = 0
 
   for x2 = x - distance, x + distance do
     for y2 = y - distance, y + distance do
-      if x2 < 0 or y2 < 0 or x2 > level.width or y2 > level.height then
+      if x2 < 0 or y2 < 0 or x2 > layout.width or y2 > layout.height then
         -- Ignore out of bounds
       elseif (x2 == x and y2 == y) then
         -- Ignore origin point
-      elseif level[x2][y2] == value then
+      elseif layout[x2][y2] == value then
         count = count + 1
       end
     end
   end
   
   return count
+end
+
+--
+-- Places an upstairs and downstair in the layout
+--
+-- Level should have a walkable array already
+--
+function LevelGen.placeExits(layout, rng)
+  local helper = function(exitTile)
+    -- Get a random reachable point
+    local index = rng:random(1, #layout.walkable)
+    local point = layout.walkable[index]
+    
+    -- Choose a random direction to find a wall
+    local dir = {
+      { 0, -1 },
+      { 0, 1 },
+      { 1, 0 },
+      { -1, 0 }
+    }
+    
+    index = rng:random(1, 4)
+    dir = dir[index]
+    
+    -- Now walk that direction until we encounter a wall or a layout boundry
+    local prevPoint = point
+    while layout[point[1]] and layout[point[1]][point[2]] ~= LevelGen.TILE_WALL do
+      prevPoint = point
+      point[1] = point[1] + dir[1]
+      point[2] = point[2] + dir[2]
+    end
+    
+    -- Place the exit tile
+    layout[point[1]][point[2]] = exitTile
+  end
+
+  helper(LevelGen.TILE_UPSTAIRS)
+  helper(LevelGen.TILE_DOWNSTAIRS)
+end
+
+--
+-- Debug function, dumps the layout layout to a file
+--
+function LevelGen.dumpLayout(layout, filename)
+  local str = ""
+  for y = 0, layout.width do
+    for x = 0, layout.height do
+      if layout[x][y] == LevelGen.TILE_FLOOR then
+        str = str .. "."
+      elseif layout[x][y] == LevelGen.TILE_WALL then
+        str = str .. "#"
+      elseif layout[x][y] == LevelGen.TILE_DOWNSTAIRS then
+        str = str .. ">"
+      elseif layout[x][y] == LevelGen.TILE_UPSTAIRS then
+        str = str .. "<"
+      else
+        str = str .. "?"
+      end
+    end
+    
+    str = str .. "\r\n"
+  end
+  
+  love.filesystem.write(filename, str, str:len())
 end

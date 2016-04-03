@@ -1,8 +1,8 @@
 Game = Game or {}
 Game.__index = Game
 
-DUNGEON_DEFAULT_WIDTH = 50
-DUNGEON_DEFAULT_HEIGHT = 50
+DUNGEON_DEFAULT_WIDTH = 100
+DUNGEON_DEFAULT_HEIGHT = 100
 
 MAX_MESSAGE_SIZE = 20
 
@@ -15,16 +15,23 @@ function Game.create()
    end
 
   self.player = Player.create()
-  self.level = Game:makeLevel(self.builderRng)
+  self.level = LevelGen.buildCaverns(self.builderRng, 1)
   self.turnCount = 0
   self.msglog = {}
   
-  self:spawnMob(self.player, 1, 1)
+  local playerX, playerY = self.level.playerStart[1], self.level.playerStart[2]
+  self:spawnMob(self.player, playerX, playerY)
   self:spawnMob(Enemy.create(), 5, 5)
   self.level:spawnItem(Dagger.create(), 10, 10)
   
   return self
 end
+
+local levelMapping = {
+  [LevelGen.TILE_WALL] = WALL_TYPE,
+  [LevelGen.TILE_DOWNSTAIRS] = DOWNSTAIRS_TYPE,
+  [LevelGen.TILE_UPSTAIRS] = UPSTAIRS_TYPE
+}
 
 --
 -- Creates the initial level
@@ -32,12 +39,12 @@ end
 function Game:makeLevel(rng)
   local level = Level.create(DUNGEON_DEFAULT_WIDTH, DUNGEON_DEFAULT_HEIGHT)
   love.filesystem.write("levelgen", "", 0)
-  local levelgen = LevelGen.buildCaves(DUNGEON_DEFAULT_WIDTH, DUNGEON_DEFAULT_HEIGHT, rng)
+  local levelgen = LevelGen.buildCavernsLayout(DUNGEON_DEFAULT_WIDTH, DUNGEON_DEFAULT_HEIGHT, rng)
   
   for x = 0, (level.width - 1) do
     for y = 0, (level.height - 1) do
-      if levelgen[x][y] == LevelGen.TILE_WALL then
-        level:getTile(x, y).tileType = WALL_TYPE
+      if levelgen[x][y] ~= LevelGen.TILE_FLOOR then
+        level:getTile(x, y).tileType = levelMapping[levelgen[x][y]]
       elseif x == 0 or y == 0 or x == (level.width - 1) or (y == level.height - 1) then
         level:getTile(x, y).tileType = WALL_TYPE
       end
