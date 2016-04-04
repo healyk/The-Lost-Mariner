@@ -21,8 +21,18 @@ LevelGen.TILE_UPSTAIRS = 4
 --
 function LevelGen.buildCaverns(rng, depth)
   local layout = LevelGen.buildCavernsLayout(DUNGEON_DEFAULT_WIDTH, DUNGEON_DEFAULT_HEIGHT, rng)
+  logmsg("buildCaverns: Generating cavern layout")
+  
+  LevelGen.placeExits(layout, rng)
+  logmsg("buildCaverns: placing exits")
+  
   layout = LevelGen.padLayout(layout)
+  logmsg("buildCaverns: padding layout")
+  LevelGen.dumpLayout(layout, 'levelgen')
+  
   local level = LevelGen.finalizeLevel(layout, rng)
+  level.depth = depth
+  logmsg("buildCaverns: finalizing layout")
   
   return level
 end
@@ -30,10 +40,10 @@ end
 function LevelGen.buildCavernsLayout(width, height, rng)
   local layout = LevelGen.create(width, height, LevelGen.TILE_FLOOR)
   
-  LevelGen.randomFill(layout, LevelGen.TILE_WALL, rng, 40)
+  LevelGen.randomFill(layout, LevelGen.TILE_WALL, rng, 45)
 
   local newLayout = nil
-  for i = 0, 9 do
+  for i = 0, 7 do
     newLayout = LevelGen.create(layout.width, layout.height, LevelGen.TILE_FLOOR)
 
     for x = 0, layout.width do
@@ -54,8 +64,6 @@ function LevelGen.buildCavernsLayout(width, height, rng)
 
   local result = LevelGen.checkReachable(layout)
   if result == 0 then
-    LevelGen.placeExits(layout, rng)
-    --LevelGen.dumpLayout(layout, 'levelgen')
     return layout
   else
     logmsg("buildCavernsLayout: not all tiles reachable, regenerating", result)
@@ -82,6 +90,9 @@ function LevelGen.create(width, height, fill)
   return layout
 end
 
+--
+-- Pads a level created only using the dungeon sizes with the default padding
+--
 function LevelGen.padLayout(layout)
   local newLayout = LevelGen.create(DUNGEON_DEFAULT_WIDTH + (DUNGEON_PADDING_SIZE * 2), 
                                     DUNGEON_DEFAULT_HEIGHT + (DUNGEON_PADDING_SIZE * 2), LevelGen.TILE_WALL)
@@ -124,6 +135,10 @@ function LevelGen.finalizeLevel(layout, rng)
   return level
 end
 
+--
+-- Given the upstairs position (x, y) this picks a position
+-- around that point and sets that as the player's start.
+--
 function LevelGen.setPlayerStart(level, layout, x, y)
   local points = {
     { x + 1, y },
@@ -165,7 +180,8 @@ function LevelGen.checkReachable(layout)
   LevelGen.removeWalkable(layout, walkables, firstPoint)
   
   -- Simple fix for the walkable problem -- if it's less than a certain threshold just fill those tiles
-  if #walkables <= 100 then
+  if #walkables <= 100 and #walkables > 0 then
+    logmsg("CaveGen: Filling small gap", #walkables)
     while #walkables > 0 do
       local point = table.remove(walkables)
       layout[point[1]][point[2]] = LevelGen.TILE_WALL
@@ -272,15 +288,25 @@ function LevelGen.placeExits(layout, rng)
     end
     
     -- Place the exit tile
-    layout[point[1]][point[2]] = exitTile
+    if layout[point[1]] then
+      layout[point[1]][point[2]] = exitTile
+      return true
+    else
+      logmsg("Can't place exit: " .. point[1] .. ", " .. point[2])
+      return false
+    end
   end
 
-  helper(LevelGen.TILE_UPSTAIRS)
-  helper(LevelGen.TILE_DOWNSTAIRS)
+  -- Sometimes a bad position is selected (usually the algorithm wanders off out of the
+  -- map bounds).  In these cases we just keep trying till we get something good.
+  while not helper(LevelGen.TILE_UPSTAIRS) do
+  end
+  while not helper(LevelGen.TILE_DOWNSTAIRS) do
+  end
 end
 
 --
--- Debug function, dumps the layout layout to a file
+-- Debug function.  Dumps the layout to a file.
 --
 function LevelGen.dumpLayout(layout, filename)
   local str = ""

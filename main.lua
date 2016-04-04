@@ -11,7 +11,7 @@ Resources = {}
 game = nil
 state = InGame
 
-function switchState(newState)
+function switchState(newState, ...)
   local oldState = state
   
   if oldState.leave then
@@ -19,7 +19,7 @@ function switchState(newState)
   end
   
   if newState.enter then
-    newState.enter(oldState)
+    newState.enter(oldState, { ... })
   end
   
   state = newState
