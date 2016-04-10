@@ -43,7 +43,7 @@ function InGame.keyreleased(game, key, scancode)
   if moveKey then
     local newX = game.player.x + moveKey[1]
     local newY = game.player.y + moveKey[2]
-    local mob = game.level:getTile(newX, newY).mob
+    local mob = game:getCurrentLevel():getTile(newX, newY).mob
   
     if mob ~= nil then
       if game:attack(game.player, mob) then

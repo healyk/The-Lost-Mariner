@@ -9,17 +9,18 @@ require('lib/ingame')
 
 Resources = {}
 game = nil
-state = InGame
+state = LevelGenState
 
 function switchState(newState, ...)
   local oldState = state
   
-  if oldState.leave then
+  if oldState and oldState.leave then
     oldState.leave(newState)
   end
   
   if newState.enter then
-    newState.enter(oldState, { ... })
+    params = { ... }
+    newState.enter(oldState, params)
   end
   
   state = newState
@@ -27,6 +28,7 @@ end
 
 function initStates()
   InventoryState.init()
+  LevelGenState.init()
 end
 
 function love.load()
@@ -44,6 +46,7 @@ function love.load()
   Resources.uiSprites = SpriteSheet.create('data/graphics/ui.png', 16, 16)
   
   initStates()
+  switchState(LevelGenState, { 1, 2, 3 }, 'Caves')
   logmsg("Game initialized")
   
   game = Game.create()

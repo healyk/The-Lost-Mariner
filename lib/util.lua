@@ -9,6 +9,16 @@ function initClass(obj, parent)
   return klass
 end
 
+function require_all(dir)
+  files = love.filesystem.getDirectoryItems(dir)
+  
+  for _, file in ipairs(files) do
+    if love.filesystem.isFile(file) then
+      require(file)
+    end
+  end
+end
+
 function isUpperCase(letter)
   return letter < 96
 end

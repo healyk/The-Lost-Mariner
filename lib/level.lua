@@ -13,6 +13,14 @@ function Level.isFloorTile(tile)
   return tile.tileType == FLOOR_TYPE
 end
 
+function Level.isUpstairsTile(tile)
+  return tile.tileType == UPSTAIRS_TYPE
+end
+
+function Level.isDownstairsTile(tile)
+  return tile.tileType == DOWNSTAIRS_TYPE
+end
+
 function Level.create(width, height)
   local self = setmetatable({}, Level)
   
@@ -77,7 +85,7 @@ end
 function Level:spawnMob(mob, x, y)
   local tile = self:getTile(x, y)
   
-  if Level.isFloorTile(tile) and tile.mob == nil then
+  if (Level.isFloorTile(tile) or Level.isUpstairsTile(tile) or Level.isDownstairsTile(tile)) and tile.mob == nil then
     self:getTile(x, y).mob = mob
     mob.x = x
     mob.y = y
@@ -86,6 +94,7 @@ function Level:spawnMob(mob, x, y)
 
     return true
   else
+    logmsg("Cannot spawn mob", mob.name, x, y, tile.tileType)
     return false
   end
 end
@@ -133,6 +142,13 @@ RENDER_TILES_WIDE = 20
 RENDER_TILES_HIGH = 20
 TILE_SIZE = 32
 
+LevelView.SpriteMapping = {
+  [FLOOR_TYPE]      = { 'floor' },
+  [WALL_TYPE]       = { 'wall' },
+  [UPSTAIRS_TYPE]   = { 'floor', 'upstairs' },
+  [DOWNSTAIRS_TYPE] = { 'downstairs' }
+}
+
 function LevelView.create()
   local self = setmetatable({}, LevelView)
   
@@ -170,7 +186,7 @@ function LevelView:setPosition(x, y)
 end
 
 function LevelView:draw(game)
-  local level = game.level
+  local level = game:getCurrentLevel()
   local offX = self.centerX - (RENDER_TILES_WIDE / 2)
   local offY = self.centerY - (RENDER_TILES_HIGH / 2)
 
@@ -179,8 +195,11 @@ function LevelView:draw(game)
       local tile = level:getTile(x + offX, y + offY)
       
       if tile then
-        local sprite = Resources.levelSprites[tile.tileType]
-        Graphics.renderSprite(sprite, x * TILE_SIZE, y * TILE_SIZE)
+        local floorSprites = LevelView.SpriteMapping[tile.tileType]
+        for _, spriteName in ipairs(floorSprites) do
+          local sprite = Resources.levelSprites[spriteName]
+          Graphics.renderSprite(sprite, x * TILE_SIZE, y * TILE_SIZE)
+        end
 
         if tile.mob then
           self:drawMob(tile.mob, x, y)

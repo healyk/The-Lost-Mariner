@@ -12,17 +12,14 @@ function Game.create()
   self.builderRng = love.math.newRandomGenerator(os.time())
   for i = 0, 100 do
     self.builderRng:random()
-   end
+  end
 
   self.player = Player.create()
-  self.level = LevelGen.buildCaverns(self.builderRng, 1)
   self.turnCount = 0
   self.msglog = {}
   
-  local playerX, playerY = self.level.playerStart[1], self.level.playerStart[2]
-  self:spawnMob(self.player, playerX, playerY)
-  self:spawnMob(Enemy.create(), 5, 5)
-  self.level:spawnItem(Dagger.create(), 10, 10)
+  self.depth = 1
+  self.levels = {}
   
   return self
 end
@@ -34,32 +31,25 @@ local levelMapping = {
 }
 
 --
--- Creates the initial level
+-- Adds a new level to the game.
 --
-function Game:makeLevel(rng)
-  local level = Level.create(DUNGEON_DEFAULT_WIDTH, DUNGEON_DEFAULT_HEIGHT)
-  love.filesystem.write("levelgen", "", 0)
-  local levelgen = LevelGen.buildCavernsLayout(DUNGEON_DEFAULT_WIDTH, DUNGEON_DEFAULT_HEIGHT, rng)
+function Game:addNewLevel(level)
+  self.levels[level.depth] = level
   
-  for x = 0, (level.width - 1) do
-    for y = 0, (level.height - 1) do
-      if levelgen[x][y] ~= LevelGen.TILE_FLOOR then
-        level:getTile(x, y).tileType = levelMapping[levelgen[x][y]]
-      elseif x == 0 or y == 0 or x == (level.width - 1) or (y == level.height - 1) then
-        level:getTile(x, y).tileType = WALL_TYPE
-      end
-    end
+  if level.depth == 1 then
+    local playerX, playerY = level.enterance[1], level.enterance[2]
+    self:spawnMob(self.player, playerX, playerY)
+    --self:spawnMob(Enemy.create(), 5, 5)
+    --level:spawnItem(Dagger.create(), 10, 10)
   end
-  
-  return level
 end
 
 function Game:spawnMob(mob, x, y)
-  return self.level:spawnMob(mob, x, y)
+  return self:getCurrentLevel():spawnMob(mob, x, y)
 end
 
 function Game:removeMob(mob)
-  return self.level:removeMob(mob)
+  return self:getCurrentLevel():removeMob(mob)
 end
 
 function Game:handlePlayerMoveMessage(newTile)
@@ -80,8 +70,9 @@ function Game:moveMobBy(x, y, deltaX, deltaY)
   local newX = x + deltaX
   local newY = y + deltaY
 
-  local tile = self.level:getTile(x, y)
-  local newTile = self.level:getTile(newX, newY)
+  local level = self:getCurrentLevel()
+  local tile = level:getTile(x, y)
+  local newTile = level:getTile(newX, newY)
   
   -- Validate movement is possible
   if Level.isFloorTile(newTile) and newTile.mob == nil then
@@ -106,6 +97,12 @@ function Game:moveMobBy(x, y, deltaX, deltaY)
     end
 
     return true
+  elseif Level.isUpstairsTile(newTile) and level.depth ~= 1 then
+    self:switchLevel(self.depth - 1)
+    return true
+  elseif Level.isDownstairsTile(newTile) and level.depth ~= 3 then
+    self:switchLevel(self.depth + 1)
+    return true
   else
     return false
   end
@@ -128,7 +125,7 @@ function Game:attack(attacker, defender)
     end
     
     if defender.health <= 0 then
-      self.level:removeMob(defender)
+      self:getCurrentLevel():removeMob(defender)
       self:logMessage("The " .. defender.name .. " dies")
     end
   else
@@ -151,4 +148,25 @@ function Game:logMessage(msg)
   if #self.msglog > MAX_MESSAGE_SIZE then
     table.remove(self.msglog, #self.msglog)
   end
+end
+
+--
+-- Gets the current level
+--
+function Game:getCurrentLevel()
+  return self.levels[self.depth]
+end
+
+function Game:switchLevel(newDepth)
+  local oldLevel = self:getCurrentLevel()
+  local newLevel = self.levels[newDepth]
+
+  oldLevel:removeMob(self.player)
+  
+  if newDepth > self.depth then
+    newLevel:spawnMob(self.player, newLevel.enterance[1], newLevel.enterance[2])
+  else
+    newLevel:spawnMob(self.player, newLevel.exit[1], newLevel.exit[2])
+  end
+  self.depth = newDepth
 end
