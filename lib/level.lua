@@ -1,13 +1,47 @@
---
+-----------------------------------
 -- Level
---
+-----------------------------------
 Level = Level or {}
 Level.__index = Level
 
+--
+-- Tile types
+--
 FLOOR_TYPE      = 'floor'
 WALL_TYPE       = 'wall'
 UPSTAIRS_TYPE   = 'upstairs'
 DOWNSTAIRS_TYPE = 'downstairs'
+
+function Level.createTileType(name, blocksMovement, blocksSight, enter, leave)
+  return {
+    name = name,
+    blocksMovement = blocksMovement,
+    blocksSight = blocksSight,
+    enter = enter,
+    leave = leave
+  }
+end
+
+function Level.goUpStairs(game, mob, tile) 
+  if game.depth ~= 1 then
+    game:switchLevel(game.depth - 1)
+  end
+end
+
+function Level.goDownStairs(game, mob, tile)  
+  if game.depth ~= 3 then
+    game:switchLevel(game.depth + 1)
+  end
+end
+
+Level.TileTypes = {
+  [FLOOR_TYPE]      = Level.createTileType(FLOOR_TYPE, false, false),
+  [WALL_TYPE]       = Level.createTileType(FLOOR_TYPE, true, true),
+  [UPSTAIRS_TYPE]   = Level.createTileType(FLOOR_TYPE, false, false, Level.goUpStairs),
+  [DOWNSTAIRS_TYPE] = Level.createTileType(FLOOR_TYPE, false, false, Level.goDownStairs),
+}
+
+-----------------------------------
 
 function Level.isFloorTile(tile)
   return tile.tileType == FLOOR_TYPE
@@ -20,6 +54,8 @@ end
 function Level.isDownstairsTile(tile)
   return tile.tileType == DOWNSTAIRS_TYPE
 end
+
+-----------------------------------
 
 function Level.create(width, height)
   local self = setmetatable({}, Level)

@@ -75,7 +75,7 @@ function Game:moveMobBy(x, y, deltaX, deltaY)
   local newTile = level:getTile(newX, newY)
   
   -- Validate movement is possible
-  if Level.isFloorTile(newTile) and newTile.mob == nil then
+  if (not Level.TileTypes[newTile.tileType].blocksMovement) and newTile.mob == nil then
     local mob = tile.mob
     local newMob = newTile.mob
     
@@ -95,13 +95,15 @@ function Game:moveMobBy(x, y, deltaX, deltaY)
     if mob.player then
       self:handlePlayerMoveMessage(newTile)
     end
+    
+    if Level.TileTypes[tile.tileType].leave then
+      Level.TileTypes[tile.tileType].leave(game, mob, tile)
+    end
+    
+    if Level.TileTypes[newTile.tileType].enter then
+      Level.TileTypes[newTile.tileType].enter(game, mob, tile)
+    end
 
-    return true
-  elseif Level.isUpstairsTile(newTile) and level.depth ~= 1 then
-    self:switchLevel(self.depth - 1)
-    return true
-  elseif Level.isDownstairsTile(newTile) and level.depth ~= 3 then
-    self:switchLevel(self.depth + 1)
     return true
   else
     return false

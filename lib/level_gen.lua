@@ -15,15 +15,16 @@ LevelGenState = LevelGenState or {}
 -- can be a table with multiple depths
 --
 function LevelGenState.enter(oldState, params)
-  LevelGenState.depths = params[1]
-  LevelGenState.theme = params[2] or 'Caves'
+  LevelGenState.depths = params
   
   if type(LevelGenState.depths) ~= 'table' then
     LevelGenState.depth = LevelGenState.depths
-    LevelGenState.depths ={}
+    LevelGenState.depths = {}
   else
     LevelGenState.depth = table.remove(LevelGenState.depths)
   end
+  
+  LevelGenState.theme = LevelGen.DepthThemes[LevelGenState.depth]
 end
 
 function LevelGenState.init()
@@ -41,8 +42,8 @@ function LevelGenState.update(game, dt)
   end
   
   if LevelGenState.step.step == LevelGen.STEP_BUILD_LAYOUT then
-    LevelGen.buildCaverns(LevelGenState.step)
-    logmsg("buildCaverns: Generating cavern layout", LevelGenState.step.iteration, dt)
+    LevelGenState.theme.build(LevelGenState.step)
+    logmsg("LevelGen: Generating theme layout", LevelGenState.step.iteration, dt)
     
   elseif LevelGenState.step.step == LevelGen.STEP_PLACE_EXITS then
     LevelGen.placeExits(LevelGenState.step)
@@ -58,6 +59,11 @@ function LevelGenState.update(game, dt)
   elseif LevelGenState.step.step == LevelGen.STEP_FINALIZE_LEVEL then
     LevelGen.finalizeLevel(LevelGenState.step)
     logmsg("LevelGen: finalizing layout", dt)
+    LevelGenState.step.step = LevelGen.STEP_SPAWN_ITEMS
+  
+  elseif LevelGenState.step.step == LevelGen.STEP_SPAWN_ITEMS then
+    LevelGen.populateItems(LevelGenState.step)
+    logmsg("LevelGen: populating items", dt)
     LevelGenState.step.step = LevelGen.STEP_FINISHED
     
   elseif LevelGenState.step.step == LevelGen.STEP_FINISHED then
@@ -81,7 +87,63 @@ function LevelGenState.draw(game)
 end
 
 -----------------------------------
+-- CaveGen
+--
+-- Contains functionality specific to generating Caverns
+-----------------------------------
+CaveGen = CaveGen or {}
+
+--
+-- Generates a layout layout based on caverns.
+--
+function CaveGen.build(levelGenStep)
+  if levelGenStep.layout == nil then
+    levelGenStep.layout = LevelGen.create(levelGenStep.width, levelGenStep.height, LevelGen.TILE_FLOOR)
+    LevelGen.randomFill(levelGenStep.layout, LevelGen.TILE_WALL, levelGenStep.rng, 45)
+  end
+  
+  if levelGenStep.iteration < LevelGen.MAX_CAVERN_ITERATIONS then
+    CaveGen.buildCavernsIteration(levelGenStep)
+  else
+    local result = LevelGen.checkReachable(levelGenStep.layout)
+    
+    if result == 0 then
+      levelGenStep.step = LevelGen.STEP_PLACE_EXITS
+    else
+      logmsg("buildCaverns: not all tiles reachable, regenerating", result)
+      levelGenStep.layout = nil
+      levelGenStep.iteration = 0
+    end
+  end
+end
+
+function CaveGen.buildCavernsIteration(levelGenStep)
+  local layout = levelGenStep.layout
+  local newLayout = nil
+
+  newLayout = LevelGen.create(layout.width, layout.height, LevelGen.TILE_FLOOR)
+
+  for x = 0, layout.width do
+    for y = 0, layout.height do
+      local count1 = LevelGen.tileCount(layout, x, y, 1, LevelGen.TILE_WALL)
+      local count2 = LevelGen.tileCount(layout, x, y, 2, LevelGen.TILE_WALL)
+
+      if count1 >= 5 or count2 <= 2 then
+        newLayout[x][y] = LevelGen.TILE_WALL
+      else
+        newLayout[x][y] = LevelGen.TILE_FLOOR
+      end
+    end
+  end
+  
+  levelGenStep.layout = newLayout
+  levelGenStep.iteration = levelGenStep.iteration + 1
+end
+
+-----------------------------------
 -- LevelGen
+--
+-- Contains the general level generation functionality.
 -----------------------------------
 LevelGen = LevelGen or {}
 
@@ -91,6 +153,7 @@ LevelGen.STEP_PLACE_EXITS = 1
 LevelGen.STEP_PAD_LAYOUT = 2
 LevelGen.STEP_FINALIZE_LEVEL = 3
 LevelGen.STEP_FINISHED = 4
+LevelGen.STEP_SPAWN_ITEMS = 5
 
 -- Tile defs
 LevelGen.TILE_FLOOR = 1
@@ -113,52 +176,14 @@ function LevelGen.makeStep(rng, width, height, depth)
   }
 end
 
---
--- Generates a layout layout based on caverns.
---
-function LevelGen.buildCaverns(levelGenStep)
-  if levelGenStep.layout == nil then
-    levelGenStep.layout = LevelGen.create(levelGenStep.width, levelGenStep.height, LevelGen.TILE_FLOOR)
-    LevelGen.randomFill(levelGenStep.layout, LevelGen.TILE_WALL, levelGenStep.rng, 45)
-  end
-  
-  if levelGenStep.iteration < LevelGen.MAX_CAVERN_ITERATIONS then
-    LevelGen.buildCavernsIteration(levelGenStep)
-  else
-    local result = LevelGen.checkReachable(levelGenStep.layout)
-    
-    if result == 0 then
-      levelGenStep.step = LevelGen.STEP_PLACE_EXITS
-    else
-      logmsg("buildCaverns: not all tiles reachable, regenerating", result)
-      levelGenStep.layout = nil
-      levelGenStep.iteration = 0
-    end
-  end
-end
+-- List of available themes
+-- 
+--   * Caverns
 
-function LevelGen.buildCavernsIteration(levelGenStep)
-  local layout = levelGenStep.layout
-  local newLayout = nil
-
-  newLayout = LevelGen.create(layout.width, layout.height, LevelGen.TILE_FLOOR)
-
-  for x = 0, layout.width do
-    for y = 0, layout.height do
-      local count1 = LevelGen.tileCount(layout, x, y, 1, LevelGen.TILE_WALL)
-      local count2 = LevelGen.tileCount(layout, x, y, 2, LevelGen.TILE_WALL)
-
-      if count1 >= 5 or count2 <= 2 then
-        newLayout[x][y] = LevelGen.TILE_WALL
-      else
-        newLayout[x][y] = LevelGen.TILE_FLOOR
-      end
-    end
-  end
-  
-  levelGenStep.layout = newLayout
-  levelGenStep.iteration = levelGenStep.iteration + 1
-end
+LevelGen.DepthThemes = {
+  -- Depths 1, 2, and 3
+  CaveGen, CaveGen, CaveGen
+}
 
 --
 -- Helpers for LevelGen
@@ -192,7 +217,8 @@ function LevelGen.padLayout(levelGenStep)
       newLayout[x + DUNGEON_PADDING_SIZE][y + DUNGEON_PADDING_SIZE] = layout[x][y]
     end
   end
-  
+
+  newLayout.walkable = layout.walkable
   levelGenStep.layout = newLayout
 end
 
@@ -226,8 +252,30 @@ function LevelGen.finalizeLevel(levelGenStep)
   end
   
   levelGenStep.level = level
+
   level.depth = levelGenStep.depth
   level.theme = levelGenStep.theme
+  level.walkable = layout.walkable
+end
+
+--
+-- Spawns items on the level
+--
+function LevelGen.populateItems(levelGenStep)
+  local level = levelGenStep.level
+  
+  local i = 0
+  while i < 20 do
+    local index = levelGenStep.rng:random(#Items.Types.Melee)
+    local item = Items.Types.Melee[index]
+    
+    index = levelGenStep.rng:random(#level.walkable)
+    local point = level.walkable[index]
+    
+    item = item.create()
+    level:spawnItem(item, point[1], point[2])
+    i = i + 1
+  end
 end
 
 --
@@ -333,7 +381,7 @@ end
 --
 -- Places an upstairs and downstair in the layout
 --
--- Level should have a walkable array already
+-- Level should have a walkable array already when calling this function.
 --
 function LevelGen.placeExits(levelGenStep)
   local rng = levelGenStep.rng
@@ -357,7 +405,9 @@ function LevelGen.placeExits(levelGenStep)
     
     -- Now walk that direction until we encounter a wall or a layout boundry
     local prevPoint = point
-    while layout[point[1]] and layout[point[1]][point[2]] ~= LevelGen.TILE_WALL do
+    while layout[point[1]] and (layout[point[1]][point[2]] ~= LevelGen.TILE_WALL) and
+          (point[1] > 0 and point[2] > 0 and point[1] < layout.width and point[2] < layout.height) do
+      logmsg("LevelGen: Exit Tile Walk", exitTile, point[1], point[2])
       prevPoint = point
       point[1] = point[1] + dir[1]
       point[2] = point[2] + dir[2]

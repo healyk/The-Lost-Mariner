@@ -1,3 +1,6 @@
+--
+-- Item
+--
 Item = initClass()
 
 function Item.create()
@@ -5,6 +8,10 @@ function Item.create()
   self.name = 'item'
   return self
 end
+
+Items = {}
+Items.Types = {}
+Items.Types.Melee = {}
 
 --
 -- Dagger
@@ -22,6 +29,8 @@ function Dagger.create()
   
   return self
 end
+
+table.insert(Items.Types.Melee, Dagger)
 
 --
 -- Inventory
